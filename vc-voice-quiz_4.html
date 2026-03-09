@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VC Voice Quiz</title>
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:ital,wght@0,700;1,400&family=DM+Mono:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0a0a0f;
+    --card-bg: #12121a;
+    --accent: #c8f04e;
+    --accent2: #ff6b35;
+    --red: #ff4757;
+    --blue: #5bc8f5;
+    --text: #f0ede8;
+    --muted: #5a5a6e;
+    --border: #1e1e2e;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 1rem;
+    overflow-x: hidden;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    top: -30%;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 700px; height: 700px;
+    background: radial-gradient(circle, rgba(200,240,78,0.05) 0%, transparent 65%);
+    pointer-events: none;
+  }
+  .container {
+    width: 100%; max-width: 660px;
+    position: relative; z-index: 1;
+    display: flex; flex-direction: column;
+    align-items: center; gap: 1.5rem;
+  }
+
+  /* CAR MODE override */
+  body.car-mode { background: #050508; }
+  body.car-mode .card { min-height: 280px; }
+  body.car-mode .card-term { font-size: clamp(2rem, 7vw, 3.2rem); }
+  body.car-mode .card-status { font-size: 0.85rem; }
+  body.car-mode .mic-ring { width: 100px; height: 100px; font-size: 2.2rem; }
+  body.car-mode .transcript-box { font-size: 0.9rem; min-height: 70px; }
+  body.car-mode .btn { font-size: 0.85rem; padding: 1rem 2rem; }
+  body.car-mode .feedback { font-size: 0.85rem; line-height: 1.8; }
+
+  header { text-align: center; }
+  .label { font-size: 0.6rem; letter-spacing: 0.25em; text-transform: uppercase; color: var(--accent); margin-bottom: 0.4rem; }
+  h1 { font-family: 'Playfair Display', serif; font-size: clamp(1.8rem, 5vw, 2.8rem); font-weight: 700; }
+  h1 em { font-style: italic; color: var(--accent); }
+
+  .car-badge {
+    display: none;
+    background: rgba(255,107,53,0.1);
+    border: 1px solid rgba(255,107,53,0.3);
+    border-radius: 4px;
+    padding: 0.3rem 0.8rem;
+    font-size: 0.65rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent2);
+  }
+  body.car-mode .car-badge { display: block; }
+
+  .mic-tip {
+    width: 100%;
+    background: rgba(91,200,245,0.07);
+    border: 1px solid rgba(91,200,245,0.2);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    font-size: 0.65rem; color: var(--blue);
+    line-height: 1.6; letter-spacing: 0.03em;
+  }
+  .mic-tip strong { color: #a0dff5; }
+
+  .scorebar {
+    display: flex; gap: 1.5rem;
+    font-size: 0.65rem; letter-spacing: 0.1em; color: var(--muted);
+  }
+  .scorebar span { color: var(--text); font-size: 0.85rem; }
+  .score-correct span { color: var(--accent); }
+  .score-wrong span { color: var(--red); }
+
+  .card {
+    width: 100%; background: var(--card-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px; padding: 2.5rem 2rem;
+    text-align: center; min-height: 220px;
+    display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    gap: 1rem; position: relative; overflow: hidden;
+    transition: border-color 0.4s, background 0.4s;
+  }
+  .card.correct { border-color: var(--accent); background: rgba(200,240,78,0.04); }
+  .card.wrong { border-color: var(--red); background: rgba(255,71,87,0.04); }
+  .card.idk { border-color: var(--blue); background: rgba(91,200,245,0.04); }
+  .card.listening { border-color: rgba(200,240,78,0.4); }
+
+  .card-category { font-size: 0.58rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent2); opacity: 0.8; }
+  .card-num { font-size: 0.58rem; letter-spacing: 0.2em; text-transform: uppercase; color: var(--accent); opacity: 0.7; }
+  .card-term { font-family: 'Playfair Display', serif; font-size: clamp(1.5rem, 4vw, 2.2rem); font-weight: 700; line-height: 1.2; }
+  .card-status { font-size: 0.72rem; color: var(--muted); letter-spacing: 0.08em; min-height: 1.2rem; }
+
+  .mic-ring {
+    width: 80px; height: 80px; border-radius: 50%;
+    background: rgba(200,240,78,0.08);
+    border: 2px solid rgba(200,240,78,0.3);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 1.8rem; transition: all 0.3s;
+  }
+  .mic-ring.active { background: rgba(200,240,78,0.15); border-color: var(--accent); animation: pulse 1.2s infinite; }
+  .mic-ring.speaking { background: rgba(255,107,53,0.1); border-color: var(--accent2); animation: pulse-orange 1s infinite; }
+  .mic-ring.idk { background: rgba(91,200,245,0.1); border-color: var(--blue); }
+  .mic-ring.waiting { background: rgba(200,240,78,0.05); border-color: rgba(200,240,78,0.15); }
+
+  @keyframes pulse {
+    0%,100% { box-shadow: 0 0 0 0 rgba(200,240,78,0.3); }
+    50% { box-shadow: 0 0 0 16px rgba(200,240,78,0); }
+  }
+  @keyframes pulse-orange {
+    0%,100% { box-shadow: 0 0 0 0 rgba(255,107,53,0.3); }
+    50% { box-shadow: 0 0 0 16px rgba(255,107,53,0); }
+  }
+
+  .countdown-wrap {
+    display: flex; align-items: center; gap: 0.5rem;
+    font-size: 0.62rem; color: var(--muted); letter-spacing: 0.08em;
+  }
+  .countdown-bar-bg { width: 120px; height: 3px; background: var(--border); border-radius: 99px; overflow: hidden; }
+  .countdown-bar { height: 100%; background: var(--accent); border-radius: 99px; transition: width linear; }
+
+  .transcript-box {
+    width: 100%; background: #0d0d14;
+    border: 1px solid var(--border); border-radius: 8px;
+    padding: 1rem 1.25rem; min-height: 60px;
+    font-size: 0.78rem; line-height: 1.6; text-align: left;
+  }
+  .transcript-label { font-size: 0.55rem; text-transform: uppercase; letter-spacing: 0.18em; color: var(--muted); margin-bottom: 0.5rem; }
+  .transcript-text { color: var(--text); opacity: 0.9; font-style: italic; }
+  .transcript-text.empty { color: var(--muted); font-style: normal; }
+
+  .feedback {
+    width: 100%; padding: 1rem 1.25rem; border-radius: 8px;
+    font-size: 0.75rem; line-height: 1.6;
+    display: none; border: 1px solid transparent;
+  }
+  .feedback.correct { display: block; background: rgba(200,240,78,0.06); border-color: rgba(200,240,78,0.2); color: var(--accent); }
+  .feedback.wrong { display: block; background: rgba(255,71,87,0.06); border-color: rgba(255,71,87,0.2); color: #ff8a94; }
+  .feedback.idk { display: block; background: rgba(91,200,245,0.06); border-color: rgba(91,200,245,0.2); color: var(--blue); }
+  .feedback strong { display: block; margin-bottom: 0.3rem; font-size: 0.8rem; }
+
+  .controls {
+    display: flex; gap: 0.75rem;
+    flex-wrap: wrap; justify-content: center; width: 100%;
+  }
+  .btn {
+    font-family: 'DM Mono', monospace;
+    font-size: 0.68rem; letter-spacing: 0.08em; text-transform: uppercase;
+    padding: 0.7rem 1.5rem; border-radius: 3px; cursor: pointer;
+    transition: all 0.2s; border: 1px solid var(--border);
+    background: transparent; color: var(--text);
+  }
+  .btn:hover { border-color: var(--text); background: rgba(255,255,255,0.04); }
+  .btn-start { background: var(--accent); border-color: var(--accent); color: var(--bg); font-weight: 500; padding: 0.8rem 2.5rem; font-size: 0.8rem; }
+  .btn-start:hover { background: #d4f55e; border-color: #d4f55e; color: var(--bg); }
+  .btn-stop { border-color: var(--red); color: var(--red); }
+  .btn-stop:hover { background: rgba(255,71,87,0.08); }
+  .btn-car { border-color: var(--accent2); color: var(--accent2); }
+  .btn-car:hover { background: rgba(255,107,53,0.08); }
+  .btn-car.active { background: rgba(255,107,53,0.12); }
+
+  .dots { display: flex; gap: 4px; flex-wrap: wrap; justify-content: center; max-width: 500px; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--border); transition: background 0.3s; }
+  .dot.current { background: var(--accent); transform: scale(1.3); }
+  .dot.correct { background: var(--accent); opacity: 0.6; }
+  .dot.wrong { background: var(--red); opacity: 0.6; }
+  .dot.idk { background: var(--blue); opacity: 0.6; }
+
+  .results { display: none; width: 100%; text-align: center; flex-direction: column; align-items: center; gap: 1.5rem; }
+  .results.show { display: flex; }
+  .results-card { width: 100%; background: var(--card-bg); border: 1px solid var(--border); border-radius: 12px; padding: 2.5rem 2rem; }
+  .results-score { font-family: 'Playfair Display', serif; font-size: 4rem; font-weight: 700; color: var(--accent); line-height: 1; margin-bottom: 0.5rem; }
+  .results-label { font-size: 0.65rem; letter-spacing: 0.15em; text-transform: uppercase; color: var(--muted); margin-bottom: 1.5rem; }
+  .missed-list { text-align: left; margin-top: 1rem; display: flex; flex-direction: column; gap: 0.5rem; }
+  .missed-item { background: rgba(255,71,87,0.05); border: 1px solid rgba(255,71,87,0.15); border-radius: 4px; padding: 0.6rem 0.9rem; font-size: 0.68rem; line-height: 1.5; }
+  .missed-term { color: var(--red); font-size: 0.75rem; margin-bottom: 0.2rem; }
+  .missed-def { color: var(--muted); }
+
+  .start-screen { text-align: center; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
+  .start-screen p { font-size: 0.72rem; color: var(--muted); line-height: 1.7; max-width: 420px; }
+  .start-screen p strong { color: var(--text); }
+
+  .option-row { display: flex; gap: 0.5rem; flex-wrap: wrap; justify-content: center; }
+  .option-btn { font-family: 'DM Mono', monospace; font-size: 0.62rem; letter-spacing: 0.1em; text-transform: uppercase; padding: 0.5rem 1rem; border-radius: 2px; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border); background: transparent; color: var(--muted); }
+  .option-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(200,240,78,0.05); }
+  .option-btn.car-active { border-color: var(--accent2); color: var(--accent2); background: rgba(255,107,53,0.05); }
+
+  .section-label { font-size: 0.6rem; color: var(--muted); letter-spacing: 0.1em; text-transform: uppercase; }
+
+  .phone-tip {
+    width: 100%;
+    background: rgba(200,240,78,0.05);
+    border: 1px solid rgba(200,240,78,0.15);
+    border-radius: 6px;
+    padding: 0.75rem 1rem;
+    font-size: 0.65rem; color: var(--muted);
+    line-height: 1.7;
+  }
+  .phone-tip strong { color: var(--accent); }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="label">Hands-Free Study Mode</div>
+    <h1>VC <em>Voice</em> Quiz</h1>
+    <div class="car-badge" style="margin-top:0.5rem;">🚗 Car Mode Active</div>
+  </header>
+
+  <!-- START SCREEN -->
+  <div class="start-screen" id="startScreen">
+    <div class="mic-tip">
+      <strong>💡 Mic tip:</strong> When Chrome asks, choose <strong>"Allow while visiting the site"</strong> — it won't ask again. Or click the 🔒 in the address bar → set Microphone to Allow.
+    </div>
+
+    <div class="phone-tip">
+      <strong>📱 Use on your phone:</strong> Save this file to <strong>iCloud Drive or Google Drive</strong>, then open it in <strong>Chrome on your phone</strong>. Works the same — including voice! Enable <strong>Car Mode</strong> below for bigger text and truly hands-free use while driving.
+    </div>
+
+    <div class="section-label">Category</div>
+    <div class="option-row" id="modeSelect"></div>
+
+    <div class="section-label" style="margin-top:0.5rem;">Pace (time after each answer)</div>
+    <div class="option-row">
+      <button class="option-btn" id="pace-relaxed" onclick="setPace('relaxed')">Relaxed (12s)</button>
+      <button class="option-btn active" id="pace-normal" onclick="setPace('normal')">Normal (8s)</button>
+      <button class="option-btn" id="pace-fast" onclick="setPace('fast')">Fast (5s)</button>
+    </div>
+
+    <div class="section-label" style="margin-top:0.5rem;">Mode</div>
+    <div class="option-row">
+      <button class="option-btn active" id="mode-standard" onclick="setMode('standard')">Standard</button>
+      <button class="option-btn" id="mode-car" onclick="setMode('car')">🚗 Car Mode</button>
+    </div>
+    <p style="font-size:0.62rem; color:var(--muted); margin-top:-0.5rem;">Car Mode: bigger text, fully hands-free, no buttons needed</p>
+
+    <button class="btn btn-start" onclick="startQuiz()">Start Quiz 🎙️</button>
+  </div>
+
+  <!-- QUIZ SCREEN -->
+  <div id="quizScreen" style="display:none; flex-direction:column; align-items:center; gap:1.5rem; width:100%;">
+    <div class="scorebar">
+      <div class="score-correct">✓ <span id="scoreCorrect">0</span></div>
+      <div>Card <span id="cardNum" style="color:var(--text)">1</span> of <span id="cardTotal" style="color:var(--text)">0</span></div>
+      <div class="score-wrong">✗ <span id="scoreWrong">0</span></div>
+    </div>
+    <div class="dots" id="dots"></div>
+
+    <div class="card" id="mainCard">
+      <div class="card-category" id="cardCategory"></div>
+      <div class="card-num" id="cardNumLabel"></div>
+      <div class="card-term" id="cardTerm">Ready…</div>
+      <div class="mic-ring" id="micRing">🎙️</div>
+      <div class="card-status" id="cardStatus">Starting…</div>
+      <div class="countdown-wrap" id="countdownWrap" style="display:none;">
+        <div class="countdown-bar-bg"><div class="countdown-bar" id="countdownBar" style="width:100%"></div></div>
+        <span id="countdownLabel">next</span>
+      </div>
+    </div>
+
+    <div class="transcript-box">
+      <div class="transcript-label">Your answer</div>
+      <div class="transcript-text empty" id="transcriptText">Listening for your response…</div>
+    </div>
+
+    <div class="feedback" id="feedback"></div>
+
+    <div class="controls" id="quizControls">
+      <button class="btn" onclick="prevCard()">← Back</button>
+      <button class="btn" onclick="repeatCard()">🔊 Repeat</button>
+      <button class="btn" onclick="skipCard()">Skip →</button>
+      <button class="btn btn-stop" onclick="stopQuiz()">End Quiz</button>
+    </div>
+  </div>
+
+  <!-- RESULTS -->
+  <div class="results" id="resultsScreen">
+    <div class="results-card">
+      <div class="results-score" id="finalScore">0%</div>
+      <div class="results-label">Final Score</div>
+      <div style="font-size:0.72rem;color:var(--muted);line-height:1.6;" id="resultsSummary"></div>
+      <div class="missed-list" id="missedList"></div>
+    </div>
+    <div class="controls">
+      <button class="btn btn-start" onclick="restartQuiz()">Try Again</button>
+      <button class="btn" onclick="showStart()">Change Settings</button>
+    </div>
+  </div>
+
+</div>
+<script>
+const allCards = [
+  { term: "Pre-Seed", category: "Funding Rounds", definition: "the earliest funding stage from founders, friends, family, or angels to build an MVP before seeking institutional capital", keywords: ["early","founders","friends","family","angels","mvp","first","initial","bootstrap"] },
+  { term: "Seed Round", category: "Funding Rounds", definition: "early stage funding to build the product, hire the initial team, and find product market fit", keywords: ["early","product","team","market fit","angels","build","hire"] },
+  { term: "Series A", category: "Funding Rounds", definition: "the first significant venture capital round after proving traction, when a company is ready to scale its business model", keywords: ["first","venture","traction","scale","optimize","proven","significant"] },
+  { term: "Series B, C, D", category: "Funding Rounds", definition: "later stage rounds used to scale operations, expand into new markets, and grow revenue", keywords: ["later","scale","expand","markets","grow","revenue","larger"] },
+  { term: "Bridge Round", category: "Funding Rounds", definition: "short term funding to bridge the gap between major rounds, often structured as a convertible note", keywords: ["short","bridge","gap","convertible","temporary","between","interim"] },
+  { term: "Down Round", category: "Funding Rounds", definition: "a funding round at a lower valuation than the previous round, signaling challenges or a market correction", keywords: ["lower","valuation","previous","challenges","correction","less","decline"] },
+  { term: "SAFE Note", category: "Funding Rounds", definition: "Simple Agreement for Future Equity — investors give money now and receive equity at a future priced round", keywords: ["simple","future","equity","y combinator","convert","agreement","later"] },
+  { term: "Convertible Note", category: "Funding Rounds", definition: "short term debt that converts into equity at a future round, with an interest rate and maturity date", keywords: ["debt","converts","equity","interest","maturity","future","loan"] },
+  { term: "Pre-Money Valuation", category: "Valuation", definition: "the company's value before new investment is added, used to calculate how much ownership investors receive", keywords: ["before","investment","value","ownership","calculate","prior"] },
+  { term: "Post-Money Valuation", category: "Valuation", definition: "the company's value after new investment is added", keywords: ["after","investment","value","added","following"] },
+  { term: "Dilution", category: "Valuation", definition: "the reduction in ownership percentage that happens when new shares are issued in a funding round", keywords: ["reduction","ownership","shares","issued","percentage","less","smaller"] },
+  { term: "Cap Table", category: "Valuation", definition: "capitalization table — a spreadsheet tracking all shareholders, ownership percentages, and equity changes across every funding round", keywords: ["capitalization","shareholders","ownership","equity","tracking","spreadsheet","table"] },
+  { term: "Liquidation Preference", category: "Valuation", definition: "investors' right to be paid back before common shareholders in a liquidation or acquisition event", keywords: ["paid","before","common","shareholders","acquisition","liquidation","priority","first"] },
+  { term: "Pro-Rata Rights", category: "Valuation", definition: "an investor's right to maintain their ownership percentage in future rounds by investing proportionally", keywords: ["maintain","ownership","future","rounds","proportional","percentage","keep"] },
+  { term: "Anti-Dilution", category: "Valuation", definition: "provisions protecting investors from dilution in a down round, through weighted average or full ratchet adjustments", keywords: ["protecting","dilution","down round","weighted","ratchet","adjustments","protect"] },
+  { term: "LP or Limited Partner", category: "VC Mechanics", definition: "investors in a VC fund — pension funds, endowments, and family offices who provide capital with limited decision making involvement", keywords: ["investors","fund","pension","endowments","capital","limited","passive","family offices"] },
+  { term: "GP or General Partner", category: "VC Mechanics", definition: "the managing partners of the VC firm who make investment decisions, sit on boards, and manage the fund", keywords: ["managing","decisions","boards","manage","partners","active","run"] },
+  { term: "Carried Interest", category: "VC Mechanics", definition: "the general partner's share of profits — typically twenty percent of gains after returning capital to limited partners", keywords: ["profits","twenty percent","20","gains","share","carry","performance"] },
+  { term: "Management Fee", category: "VC Mechanics", definition: "an annual fee of about two percent of fund size charged by the VC firm to cover operational costs", keywords: ["annual","two percent","2","fee","operational","costs","yearly"] },
+  { term: "Dry Powder", category: "VC Mechanics", definition: "uninvested capital sitting in a fund, ready to be deployed into new investments or follow-on rounds", keywords: ["uninvested","capital","ready","deploy","available","reserves","cash"] },
+  { term: "Vintage Year", category: "VC Mechanics", definition: "the year a VC fund was formed and began investing, used to benchmark its performance against similar funds", keywords: ["year","formed","benchmark","performance","compare","started"] },
+  { term: "Two and Twenty", category: "VC Mechanics", definition: "the standard VC fee structure — two percent annual management fee plus twenty percent carried interest on profits", keywords: ["two","twenty","2","20","fee","carry","structure","standard"] },
+  { term: "Product Market Fit", category: "Startup", definition: "when a product satisfies strong market demand — users love it, retention is high, and growth becomes organic", keywords: ["satisfies","demand","users","retention","growth","organic","love","pmf","natural"] },
+  { term: "MVP", category: "Startup", definition: "minimum viable product — the simplest version of a product used to test a hypothesis with real users", keywords: ["minimum","viable","simplest","test","hypothesis","users","lean","basic"] },
+  { term: "Runway", category: "Startup", definition: "how many months a company can operate before running out of cash at its current burn rate", keywords: ["months","cash","operate","burn","time","money","left"] },
+  { term: "Burn Rate", category: "Startup", definition: "how much cash a company spends each month — net burn equals expenses minus revenue", keywords: ["cash","spends","monthly","expenses","revenue","spending","cost"] },
+  { term: "ARR or MRR", category: "Startup", definition: "annual or monthly recurring revenue — predictable, subscription-based revenue, the key SaaS metric", keywords: ["annual","monthly","recurring","revenue","subscription","saas","predictable"] },
+  { term: "Churn", category: "Startup", definition: "the rate at which customers cancel or stop paying — high churn signals weak product market fit", keywords: ["cancel","customers","stop","leaving","attrition","retention","quit"] },
+  { term: "LTV to CAC", category: "Startup", definition: "lifetime value divided by customer acquisition cost — measures unit economics, a healthy ratio is three to one or higher", keywords: ["lifetime","value","acquisition","cost","ratio","unit economics","three","ltv","cac"] },
+  { term: "TAM SAM SOM", category: "Startup", definition: "total addressable market, serviceable addressable market, and serviceable obtainable market — used to frame market size in a pitch", keywords: ["total","addressable","market","serviceable","obtainable","size","opportunity","tam"] },
+  { term: "Unicorn", category: "Startup", definition: "a privately held startup valued at one billion dollars or more", keywords: ["billion","private","one billion","1 billion","valuation","billion dollar"] },
+  { term: "Hockey Stick Growth", category: "Startup", definition: "a growth curve that looks flat at first then shoots sharply upward — the trajectory VCs look for in startups", keywords: ["flat","curves","sharply","upward","exponential","rapid","explosive","steep"] },
+  { term: "Term Sheet", category: "Deal Terms", definition: "a non-binding document outlining the key terms of a proposed investment — valuation, equity stake, and board seats", keywords: ["non-binding","document","terms","investment","valuation","equity","board","outline"] },
+  { term: "Due Diligence", category: "Deal Terms", definition: "the thorough investigation a VC conducts before investing — reviewing financials, legal documents, technology, team, and market", keywords: ["investigation","reviewing","financials","legal","technology","research","verify","dd","check"] },
+  { term: "Lead Investor", category: "Deal Terms", definition: "the VC who anchors a funding round, sets the terms, contributes the largest check, and often takes a board seat", keywords: ["anchors","sets terms","largest","check","board seat","primary","leads"] },
+  { term: "Protective Provisions", category: "Deal Terms", definition: "investor veto rights over major company decisions like selling the company, taking on debt, or issuing new shares", keywords: ["veto","rights","decisions","selling","debt","shares","protect","block"] },
+  { term: "IPO", category: "Exits", definition: "initial public offering — when a private company sells shares to the public on a stock exchange for the first time", keywords: ["initial","public","offering","stock","exchange","shares","public market","listing"] },
+  { term: "M&A", category: "Exits", definition: "merger and acquisition — when a company is acquired by or merges with another company, the most common VC exit", keywords: ["acquired","merges","acquisition","bought","purchase","exit","sold"] },
+  { term: "MOIC", category: "Exits", definition: "multiple on invested capital — how many times an investor got back their money; three x means three dollars returned per dollar invested", keywords: ["multiple","invested","capital","times","return","dollars","back","moic"] },
+  { term: "IRR", category: "Exits", definition: "internal rate of return — the annualized return on an investment accounting for the time value of money", keywords: ["internal","annualized","return","time value","percentage","annual","rate"] },
+  { term: "Power Law", category: "Exits", definition: "in venture capital, a small number of investments generate the vast majority of returns — why VCs swing for home runs", keywords: ["small number","majority","returns","home runs","few","most","outsized","concentration"] },
+];
+
+const IDK_PHRASES = ["i don't know","i dont know","don't know","no idea","not sure","i'm not sure","i have no idea","pass","skip","blank","i forgot","can't remember","no clue","haven't got","give up"];
+const IDK_ENCOURAGEMENTS = [
+  "No worries, this one is tricky! Here is the answer:",
+  "That is okay! Hearing it will help it stick. Here it is:",
+  "You will get it next time! Here is the definition:",
+  "Totally fine — this is exactly why we practice. Here it is:",
+  "No stress! Here is the one to remember:",
+];
+
+const categories = ["All", ...new Set(allCards.map(c => c.category))];
+let selectedCategory = "All";
+let paceMs = 8000;
+let carMode = false;
+let quizCards = [], currentIndex = 0;
+let scoreCorrect = 0, scoreWrong = 0, idkCount = 0;
+let missedCards = [];
+let recognition = null;
+let synth = window.speechSynthesis;
+let isListening = false, isProcessing = false;
+let autoAdvanceTimer = null, countdownInterval = null;
+
+// Build category buttons
+const modeSelect = document.getElementById('modeSelect');
+categories.forEach(cat => {
+  const btn = document.createElement('button');
+  btn.className = 'option-btn' + (cat === 'All' ? ' active' : '');
+  btn.textContent = cat;
+  btn.onclick = () => { document.querySelectorAll('#modeSelect .option-btn').forEach(b => b.classList.remove('active')); btn.classList.add('active'); selectedCategory = cat; };
+  modeSelect.appendChild(btn);
+});
+
+function setPace(p) {
+  document.querySelectorAll('[id^="pace-"]').forEach(b => b.classList.remove('active'));
+  document.getElementById('pace-' + p).classList.add('active');
+  paceMs = p === 'relaxed' ? 12000 : p === 'fast' ? 5000 : 8000;
+}
+
+function setMode(m) {
+  carMode = m === 'car';
+  document.getElementById('mode-standard').classList.toggle('active', !carMode);
+  document.getElementById('mode-car').classList.toggle('active', carMode);
+  document.getElementById('mode-car').classList.toggle('car-active', carMode);
+}
+
+function shuffle(arr) {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; }
+  return a;
+}
+
+function startQuiz() {
+  quizCards = shuffle(selectedCategory === "All" ? allCards : allCards.filter(c => c.category === selectedCategory));
+  currentIndex = 0; scoreCorrect = 0; scoreWrong = 0; idkCount = 0; missedCards = [];
+
+  if (carMode) {
+    document.body.classList.add('car-mode');
+    document.getElementById('quizControls').style.display = 'none';
+  } else {
+    document.body.classList.remove('car-mode');
+    document.getElementById('quizControls').style.display = 'flex';
+  }
+
+  document.getElementById('startScreen').style.display = 'none';
+  document.getElementById('resultsScreen').classList.remove('show');
+  const qs = document.getElementById('quizScreen');
+  qs.style.display = 'flex'; qs.style.flexDirection = 'column';
+  qs.style.alignItems = 'center'; qs.style.gap = '1.5rem'; qs.style.width = '100%';
+  document.getElementById('cardTotal').textContent = quizCards.length;
+  buildDots();
+  setupRecognition();
+  showCard();
+}
+
+function buildDots() {
+  document.getElementById('dots').innerHTML = quizCards.map((_, i) => `<div class="dot" id="dot${i}"></div>`).join('');
+}
+function updateDot(i, state) { const d = document.getElementById('dot' + i); if (d) d.className = 'dot ' + state; }
+
+function showCard() {
+  if (currentIndex >= quizCards.length) { endQuiz(); return; }
+  clearCountdown();
+  const card = quizCards[currentIndex];
+  document.getElementById('cardCategory').textContent = card.category;
+  document.getElementById('cardNumLabel').textContent = `Term ${currentIndex + 1} of ${quizCards.length}`;
+  document.getElementById('cardTerm').textContent = card.term;
+  document.getElementById('cardNum').textContent = currentIndex + 1;
+  document.getElementById('scoreCorrect').textContent = scoreCorrect;
+  document.getElementById('scoreWrong').textContent = scoreWrong;
+  document.getElementById('cardStatus').textContent = '🔊 Reading term…';
+  document.getElementById('transcriptText').textContent = 'Listening for your response…';
+  document.getElementById('transcriptText').className = 'transcript-text empty';
+  document.getElementById('feedback').className = 'feedback';
+  document.getElementById('feedback').innerHTML = '';
+  document.getElementById('mainCard').className = 'card';
+  document.getElementById('micRing').className = 'mic-ring speaking';
+  document.getElementById('countdownWrap').style.display = 'none';
+  updateDot(currentIndex, 'current');
+  isProcessing = false;
+  speak(card.term, () => setTimeout(() => startListening(), 500));
+}
+
+function speak(text, callback) {
+  if (synth.speaking) synth.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.rate = 0.9; utter.pitch = 1; utter.volume = 1;
+  document.getElementById('micRing').className = 'mic-ring speaking';
+  utter.onend = () => {
+    document.getElementById('micRing').className = 'mic-ring';
+    if (callback) callback();
+  };
+  synth.speak(utter);
+}
+
+function setupRecognition() {
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRec) { document.getElementById('cardStatus').textContent = '⚠️ Use Chrome for voice.'; return; }
+  recognition = new SpeechRec();
+  recognition.continuous = false;
+  recognition.interimResults = true;
+  recognition.lang = 'en-US';
+  recognition.onstart = () => {
+    isListening = true;
+    document.getElementById('micRing').className = 'mic-ring active';
+    document.getElementById('cardStatus').textContent = '🎙️ Say the definition…';
+    document.getElementById('mainCard').classList.add('listening');
+  };
+  recognition.onresult = (e) => {
+    let interim = '', final = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) final += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    const display = final || interim;
+    if (display) {
+      document.getElementById('transcriptText').textContent = '"' + display + '"';
+      document.getElementById('transcriptText').className = 'transcript-text';
+    }
+    if (final && !isProcessing) { isProcessing = true; checkAnswer(final.trim().toLowerCase()); }
+  };
+  recognition.onerror = (e) => {
+    if (e.error === 'no-speech') {
+      document.getElementById('cardStatus').textContent = 'No speech detected…';
+      setTimeout(() => nextCard(), 2500);
+    }
+    isListening = false;
+    document.getElementById('micRing').className = 'mic-ring';
+  };
+  recognition.onend = () => { isListening = false; document.getElementById('micRing').className = 'mic-ring'; };
+}
+
+function startListening() {
+  if (!recognition) return;
+  try { recognition.start(); } catch(e) {}
+}
+function stopListening() {
+  if (recognition && isListening) { try { recognition.stop(); } catch(e) {} }
+}
+
+function isIDK(answer) {
+  return IDK_PHRASES.some(phrase => answer.includes(phrase));
+}
+
+function checkAnswer(answer) {
+  stopListening();
+  const card = quizCards[currentIndex];
+
+  if (isIDK(answer)) {
+    idkCount++;
+    missedCards.push(card);
+    updateDot(currentIndex, 'idk');
+    document.getElementById('mainCard').className = 'card idk';
+    document.getElementById('micRing').className = 'mic-ring idk';
+    const enc = IDK_ENCOURAGEMENTS[Math.floor(Math.random() * IDK_ENCOURAGEMENTS.length)];
+    const fb = document.getElementById('feedback');
+    fb.className = 'feedback idk';
+    fb.innerHTML = `<strong>💙 ${enc}</strong>${card.definition}`;
+    // KEY FIX: countdown starts AFTER speech finishes
+    speak(enc + ' ' + card.term + ' means: ' + card.definition, () => {
+      startCountdown(() => nextCard());
+    });
+    return;
+  }
+
+  const keywords = card.keywords;
+  const matchCount = keywords.filter(kw => answer.includes(kw.toLowerCase())).length;
+  const threshold = Math.max(1, Math.floor(keywords.length * 0.22));
+  const correct = matchCount >= threshold;
+  const fb = document.getElementById('feedback');
+
+  if (correct) {
+    scoreCorrect++;
+    document.getElementById('mainCard').className = 'card correct';
+    updateDot(currentIndex, 'correct');
+    fb.className = 'feedback correct';
+    fb.innerHTML = `<strong>✓ Correct!</strong>${card.definition}`;
+    // KEY FIX: countdown starts AFTER speech finishes
+    speak('Correct! ' + card.definition, () => {
+      startCountdown(() => nextCard());
+    });
+  } else {
+    scoreWrong++;
+    missedCards.push(card);
+    document.getElementById('mainCard').className = 'card wrong';
+    updateDot(currentIndex, 'wrong');
+    fb.className = 'feedback wrong';
+    fb.innerHTML = `<strong>✗ Not quite.</strong>${card.definition}`;
+    // KEY FIX: countdown starts AFTER speech finishes
+    speak('Not quite. ' + card.term + ' means: ' + card.definition, () => {
+      startCountdown(() => nextCard());
+    });
+  }
+
+  document.getElementById('scoreCorrect').textContent = scoreCorrect;
+  document.getElementById('scoreWrong').textContent = scoreWrong;
+}
+
+function startCountdown(callback) {
+  clearCountdown();
+  const wrap = document.getElementById('countdownWrap');
+  const bar = document.getElementById('countdownBar');
+  const label = document.getElementById('countdownLabel');
+  wrap.style.display = 'flex';
+  bar.style.transition = 'none';
+  bar.style.width = '100%';
+  let remaining = Math.round(paceMs / 1000);
+  label.textContent = remaining + 's';
+  setTimeout(() => {
+    bar.style.transition = `width ${paceMs}ms linear`;
+    bar.style.width = '0%';
+  }, 50);
+  countdownInterval = setInterval(() => {
+    remaining--;
+    label.textContent = remaining + 's';
+    if (remaining <= 0) clearInterval(countdownInterval);
+  }, 1000);
+  autoAdvanceTimer = setTimeout(callback, paceMs);
+}
+
+function clearCountdown() {
+  if (autoAdvanceTimer) clearTimeout(autoAdvanceTimer);
+  if (countdownInterval) clearInterval(countdownInterval);
+  document.getElementById('countdownWrap').style.display = 'none';
+}
+
+function nextCard() {
+  clearCountdown(); stopListening();
+  if (synth.speaking) synth.cancel();
+  currentIndex++;
+  if (currentIndex >= quizCards.length) { endQuiz(); return; }
+  setTimeout(() => showCard(), 400);
+}
+function prevCard() {
+  clearCountdown(); stopListening();
+  if (synth.speaking) synth.cancel();
+  if (currentIndex > 0) currentIndex--;
+  setTimeout(() => showCard(), 300);
+}
+function skipCard() {
+  clearCountdown(); stopListening();
+  if (synth.speaking) synth.cancel();
+  updateDot(currentIndex, 'wrong');
+  scoreWrong++; missedCards.push(quizCards[currentIndex]);
+  currentIndex++;
+  if (currentIndex >= quizCards.length) { endQuiz(); return; }
+  setTimeout(() => showCard(), 300);
+}
+function repeatCard() {
+  clearCountdown();
+  if (synth.speaking) synth.cancel();
+  stopListening();
+  speak(quizCards[currentIndex].term, () => setTimeout(() => startListening(), 500));
+}
+function stopQuiz() {
+  clearCountdown(); stopListening();
+  if (synth.speaking) synth.cancel();
+  endQuiz();
+}
+
+function endQuiz() {
+  clearCountdown(); stopListening();
+  if (synth.speaking) synth.cancel();
+  document.body.classList.remove('car-mode');
+  document.getElementById('quizScreen').style.display = 'none';
+  const total = scoreCorrect + scoreWrong + idkCount;
+  const pct = total > 0 ? Math.round((scoreCorrect / total) * 100) : 0;
+  document.getElementById('finalScore').textContent = pct + '%';
+  document.getElementById('resultsSummary').innerHTML =
+    `<strong style="color:var(--accent)">${scoreCorrect}</strong> correct &nbsp;·&nbsp; <strong style="color:var(--red)">${scoreWrong}</strong> missed &nbsp;·&nbsp; <strong style="color:var(--blue)">${idkCount}</strong> skipped out of ${total} cards.`;
+  const ml = document.getElementById('missedList');
+  ml.innerHTML = missedCards.length > 0
+    ? '<div style="font-size:0.6rem;letter-spacing:0.15em;text-transform:uppercase;color:var(--muted);margin-bottom:0.5rem;">— Review These —</div>' +
+      missedCards.map(c => `<div class="missed-item"><div class="missed-term">${c.term}</div><div class="missed-def">${c.definition}</div></div>`).join('')
+    : '<div style="color:var(--accent);font-size:0.75rem;margin-top:0.5rem;">🎉 Perfect score! You know your VC lingo.</div>';
+  document.getElementById('resultsScreen').classList.add('show');
+  const msg = pct >= 80 ? 'Amazing work! You scored ' + pct + ' percent.' : 'You scored ' + pct + ' percent. Review the missed terms and you will nail it next time.';
+  setTimeout(() => speak(msg), 600);
+}
+
+function restartQuiz() { document.getElementById('resultsScreen').classList.remove('show'); startQuiz(); }
+function showStart() {
+  document.getElementById('resultsScreen').classList.remove('show');
+  document.getElementById('quizScreen').style.display = 'none';
+  const ss = document.getElementById('startScreen');
+  ss.style.display = 'flex'; ss.style.flexDirection = 'column';
+  ss.style.alignItems = 'center'; ss.style.gap = '1rem';
+}
+</script>
+</body>
+</html>
